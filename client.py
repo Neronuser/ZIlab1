@@ -62,6 +62,25 @@ def brute_force(p, g, A, B):
             return (A ** i) % p
 
 
+def brute_force_and_connect():
+    A = 2
+    B = 3
+
+    shared_secret = brute_force(sharedPrime, sharedBase, A, B)
+    print("Found shared secret: %s" % shared_secret)
+
+    padded_shared_secret = padd(str(shared_secret))
+    encrypted_padded_shared_secret = encrypt(bytes(padded_shared_secret, "UTF-8"), str(shared_secret))
+    sock.sendall(encrypted_padded_shared_secret)
+
+    login = input("Input your login\n")
+    login = padd(login)
+    encrypted_login = encrypt(bytes(login, "UTF-8"), str(clientSharedSecret))
+    sock.sendall(encrypted_login)
+
+    sock.close()
+
+
 sharedPrime = 23  # p
 sharedBase = 4  # g
 clientSecret = 6  # a
@@ -76,83 +95,71 @@ server_address = ('localhost', 10002)
 print('connecting to %s port %s' % server_address)
 sock.connect(server_address)
 
+try:
+    print(bytes(A, "UTF-8"))
+    sock.sendall(bytes(A, "UTF-8"))
 
-chat()
+    B = sock.recv(100)
+    B = int(B)
+    print('received "%s"' % B)
 
-
-def brute_force_and_connect():
-    # TODO: get following values from Wireshark and hardcode here
-    A = 8
-    B = 19
-    
-    shared_secret = brute_force(sharedPrime, sharedBase, A, B)
-    print("Found shared secret: %s" % shared_secret)
-    
-    padded_shared_secret = padd(str(shared_secret))
-    encrypted_padded_shared_secret = encrypt(bytes(padded_shared_secret, "UTF-8"), str(shared_secret))
-    sock.sendall(encrypted_padded_shared_secret)
+    clientSharedSecret = (B ** clientSecret) % sharedPrime
+    print("Secret: %s" % clientSharedSecret)
 
 
-def chat():
-    try:
-        print(bytes(A, "UTF-8"))
-        sock.sendall(bytes(A, "UTF-8"))
+    # brute_force_and_connect()
+    #
+    # exit()
 
-        B = sock.recv(100)
-        B = int(B)
-        print('received "%s"' % B)
+    print("Handshake ended")
 
-        clientSharedSecret = (B ** clientSecret) % sharedPrime
-        print("Secret: %s" % clientSharedSecret)
+    paddedClientSharedSecret = padd(str(clientSharedSecret))
+    encryptedPaddedClientSharedSecret = encrypt(bytes(paddedClientSharedSecret, "UTF-8"), str(clientSharedSecret))
+    sock.sendall(encryptedPaddedClientSharedSecret)
 
-        print("Handshake ended")
+    while True:
+        login = input("Input your login\n")
+        login = padd(login)
+        encrypted_login = encrypt(bytes(login, "UTF-8"), str(clientSharedSecret))
+        sock.sendall(encrypted_login)
 
-        paddedClientSharedSecret = padd(str(clientSharedSecret))
-        encryptedPaddedClientSharedSecret = encrypt(bytes(paddedClientSharedSecret, "UTF-8"), str(clientSharedSecret))
-        sock.sendall(encryptedPaddedClientSharedSecret)
+        print(encrypted_login)
+
+        response = decrypt(sock.recv(100), str(clientSharedSecret))
+        if response.decode('ascii') == padd("Wrong login"):
+            print("Wrong login, try again")
+            continue
 
         while True:
-            login = input("Input your login\n")
-            login = padd(login)
-            encrypted_login = encrypt(bytes(login, "UTF-8"), str(clientSharedSecret))
-            sock.sendall(encrypted_login)
-
-            print(encrypted_login)
+            # password = input("Input your password\n")
+            password = getpass("Input your password\n")
+            password = padd(password)
+            encrypted_pass = encrypt(bytes(password, "UTF-8"), str(clientSharedSecret))
+            sock.sendall(encrypted_pass)
 
             response = decrypt(sock.recv(100), str(clientSharedSecret))
-            if response.decode('ascii') == padd("Wrong login"):
-                print("Wrong login, try again")
+            if response.decode('ascii') == padd("Wrong pass"):
+                print("Wrong password")
                 continue
-
-            while True:
-                # password = input("Input your password\n")
-                password = getpass("Input your password\n")
-                password = padd(password)
-                encrypted_pass = encrypt(bytes(password, "UTF-8"), str(clientSharedSecret))
-                sock.sendall(encrypted_pass)
-
-                response = decrypt(sock.recv(100), str(clientSharedSecret))
-                if response.decode('ascii') == padd("Wrong pass"):
-                    print("Wrong password")
-                    continue
-                elif response.decode('ascii') == padd("Successful"):
-                    print("Success")
-                else:
-                    exit()
-                break
-
-            while True:
-                message1 = input("Message:\n")
-                message = padd(message1)
-                encrypted_message = encrypt(bytes(message, "UTF-8"), str(clientSharedSecret))
-                sock.sendall(encrypted_message)
-                if message1 == "q":
-                    break
-                encrypted_response = sock.recv(100)
-                response = decrypt(encrypted_response, str(clientSharedSecret))
-                print(unpadd(response.decode('ascii')))
+            elif response.decode('ascii') == padd("Successful"):
+                print("Success")
+            else:
+                exit()
             break
 
-    finally:
-        print('closing socket')
-        sock.close()
+        while True:
+            message1 = input("Message:\n")
+            message = padd(message1)
+            encrypted_message = encrypt(bytes(message, "UTF-8"), str(clientSharedSecret))
+            sock.sendall(encrypted_message)
+            if message1 == "q":
+                break
+            encrypted_response = sock.recv(100)
+            response = decrypt(encrypted_response, str(clientSharedSecret))
+            print(unpadd(response.decode('ascii')))
+        break
+
+finally:
+    print('closing socket')
+    sock.close()
+

@@ -81,7 +81,11 @@ while True:
     try:
         print('connection from', client_address)
 
-        A = int(connection.recv(100))
+        try:
+            A = int(connection.recv(100))
+        except:
+            continue
+
         serverSharedSecret = (A**serverSecret) % sharedPrime
         print('received "%s"' % A)
         print("secret: %s" % serverSharedSecret)
